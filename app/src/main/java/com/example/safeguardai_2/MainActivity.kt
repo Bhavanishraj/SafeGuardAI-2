@@ -7,8 +7,10 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.os.Build
 import android.os.Bundle
 import android.telephony.SmsManager
+import android.view.KeyEvent
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresPermission
@@ -24,6 +26,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var etPhone: EditText
     private lateinit var cbSendAll: CheckBox
     private lateinit var switchShake: SwitchCompat
+    private lateinit var switchVolumeTrigger: SwitchCompat
 
     // Shake detection variables
     private lateinit var sensorManager: SensorManager
@@ -33,7 +36,11 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private var shakeCount = 0
     private var lastShakeTime: Long = 0
 
-    // Permission launcher MUST be defined at the class level to avoid crashes
+    // Volume trigger variables (Internal to App)
+    private var volumeBtnCount = 0
+    private var lastVolumeBtnTime: Long = 0
+
+    // Permission launcher defined at class level to avoid lifecycle crashes
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
@@ -48,23 +55,42 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        // Initialize UI components
+        // Initialize UI
         etPhone = findViewById(R.id.etPhone)
         cbSendAll = findViewById(R.id.cbSendAll)
         switchShake = findViewById(R.id.switchShake)
+        switchVolumeTrigger = findViewById(R.id.switchVolumeTrigger)
 
-        // Initialize Sensor Manager
+        // Initialize Sensors
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         acceleration = 10f
         currentAcceleration = SensorManager.GRAVITY_EARTH
         lastAcceleration = SensorManager.GRAVITY_EARTH
 
+        // Contacts Button
         findViewById<Button>(R.id.btnViewContacts).setOnClickListener {
             startActivity(Intent(this, ContactsActivity::class.java))
         }
 
+        // Manual SOS Button
         findViewById<Button>(R.id.btnSOS).setOnClickListener {
             checkPermissionsAndTrigger()
+        }
+
+        // Volume Service Toggle (For Background/Screen-off listening)
+        switchVolumeTrigger.setOnCheckedChangeListener { _, isChecked ->
+            val serviceIntent = Intent(this, VolumeButtonService::class.java)
+            if (isChecked) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(serviceIntent)
+                } else {
+                    startService(serviceIntent)
+                }
+                Toast.makeText(this, "Background Monitoring Active", Toast.LENGTH_SHORT).show()
+            } else {
+                stopService(serviceIntent)
+                Toast.makeText(this, "Background Monitoring Disabled", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -93,28 +119,32 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         }
 
         if (recipients.isEmpty()) {
-            Toast.makeText(this, "No recipients found", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "No recipients. Please add/select a contact.", Toast.LENGTH_SHORT).show()
             return
         }
 
         LocationServices.getFusedLocationProviderClient(this).lastLocation.addOnSuccessListener { loc ->
             if (loc != null) {
-                // FIXED: Use ${} for variables in strings to prevent failures
                 val mapsLink = "https://www.google.com/maps?q=${loc.latitude},${loc.longitude}"
                 val msg = "🚨 SOS ALERT! I need help. My location: $mapsLink"
-                val smsManager = getSystemService(SmsManager::class.java)
 
-                recipients.forEach { num ->
-                    val parts = smsManager.divideMessage(msg)
-                    smsManager.sendMultipartTextMessage(num, null, parts, null, null)
+                try {
+                    val smsManager = getSystemService(SmsManager::class.java)
+                    recipients.forEach { num ->
+                        val parts = smsManager.divideMessage(msg)
+                        smsManager.sendMultipartTextMessage(num, null, parts, null, null)
+                    }
+                    Toast.makeText(this, "SOS Sent!", Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    Toast.makeText(this, "SMS Failed: ${e.message}", Toast.LENGTH_LONG).show()
                 }
-                Toast.makeText(this, "SOS Sent!", Toast.LENGTH_SHORT).show()
             } else {
-                Toast.makeText(this, "Unable to get location. Is GPS on?", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Location not found. Ensure GPS is ON.", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
+    // --- Shake Detection Logic ---
     override fun onSensorChanged(event: SensorEvent?) {
         if (!switchShake.isChecked) return
 
@@ -139,7 +169,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
                 if (shakeCount >= 3) {
                     shakeCount = 0
-                    Toast.makeText(this, "Shake Detected!", Toast.LENGTH_SHORT).show()
                     checkPermissionsAndTrigger()
                 }
             }
@@ -148,13 +177,34 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
+    // --- Volume Button Trigger (While app is open) ---
+    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
+            val currentTime = System.currentTimeMillis()
+            if (currentTime - lastVolumeBtnTime < 2000) {
+                volumeBtnCount++
+            } else {
+                volumeBtnCount = 1
+            }
+            lastVolumeBtnTime = currentTime
+
+            if (volumeBtnCount >= 3) {
+                volumeBtnCount = 0
+                startActivity(Intent(this, FakeCallActivity::class.java))
+                return true
+            }
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
     override fun onResume() {
         super.onResume()
+        // Update selected contact from list
         val prefs = getSharedPreferences("SOS_Prefs", MODE_PRIVATE)
         val selectedPhone = prefs.getString("selected_phone", "")
         if (!selectedPhone.isNullOrEmpty()) {
             etPhone.setText(selectedPhone)
-            prefs.edit().remove("selected_phone").apply() // Clear after use
+            prefs.edit().remove("selected_phone").apply()
         }
 
         sensorManager.registerListener(this,

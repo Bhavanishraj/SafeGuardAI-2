@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -10,13 +11,17 @@
         android:layout_height="wrap_content"
         android:text="Emergency Contact Number"
         android:textStyle="bold"
-        android:textSize="18sp" />
+        android:textSize="18sp"
+        android:textColor="#000000"
+        android:layout_marginTop="20dp"/>
 
     <EditText
         android:id="@+id/etPhone"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:hint="+91XXXXXXXXXX"
+        android:textColor="#000000"
+        android:textColorHint="#757575"
         android:inputType="phone" />
 
     <CheckBox
@@ -24,15 +29,8 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Send SOS to all emergency contacts"
+        android:textColor="#000000"
         android:layout_marginTop="16dp" />
-
-    <Button
-        android:id="@+id/btnSaveContact"
-        android:layout_width="match_parent"
-        android:layout_height="60dp"
-        android:text="Save Contact"
-        android:backgroundTint="#6750A4"
-        android:layout_marginTop="24dp" />
 
     <Button
         android:id="@+id/btnViewContacts"
@@ -40,6 +38,7 @@
         android:layout_height="60dp"
         android:text="👥 Emergency Contacts"
         android:backgroundTint="#6750A4"
+        android:textColor="#FFFFFF"
         android:layout_marginTop="12dp" />
 
     <Button
@@ -48,6 +47,7 @@
         android:layout_height="60dp"
         android:text="🚨 SOS"
         android:backgroundTint="#6750A4"
+        android:textColor="#FFFFFF"
         android:layout_marginTop="12dp" />
 
     <TextView
@@ -55,8 +55,18 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="Selected contact: None"
+        android:textColor="#000000"
         android:layout_gravity="center"
         android:layout_marginTop="40dp"
-        android:padding="12dp"
-        android:background="@drawable/rounded_corner_bg" />
+        android:padding="12dp" />
+
+    <androidx.appcompat.widget.SwitchCompat
+        android:id="@+id/switchShake"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Enable Shake to SOS (Shake 3 times)"
+        android:textColor="#000000"
+        android:layout_marginTop="16dp"
+        android:padding="8dp" />
+
 </LinearLayout>

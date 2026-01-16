@@ -5,19 +5,18 @@ plugins {
 
 android {
     namespace = "com.example.safeguardai_2"
-    // Change both of these to 34
-    compileSdk = 34
+    compileSdk = 36 // Satisfies requirements of androidx.activity 1.12.2
 
     defaultConfig {
         applicationId = "com.example.safeguardai_2"
         minSdk = 24
-        targetSdk = 34 // Matches compileSdk
+        targetSdk = 36
         versionCode = 1
         versionName = "1.0"
-
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // Fix: Move these blocks inside the android { } block properly
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -37,17 +36,15 @@ android {
 }
 
 dependencies {
-
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.activity:activity-ktx:1.9.3")
     implementation("androidx.constraintlayout:constraintlayout:2.2.0")
-
     implementation("com.google.android.material:material:1.12.0")
     implementation("com.google.code.gson:gson:2.10.1")
-
-    // Location
     implementation("com.google.android.gms:play-services-location:21.3.0")
+
+    // Fix: Ensure you aren't duplicating the activity dependency
     implementation(libs.androidx.activity)
 
     testImplementation("junit:junit:4.13.2")

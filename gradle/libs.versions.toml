@@ -1,6 +1,6 @@
 [versions]
-agp = "8.1.1"  # Minimum AGP for API 34
-kotlin = "1.9.0"
+agp = "8.9.1"  # Minimum AGP for API 34
+kotlin = "1.9.20"
 coreKtx = "1.12.0" # Libraries like these often require higher SDKs
 appcompat = "1.6.1"
 junit = "4.13.2"

@@ -3,6 +3,7 @@ package com.example.safeguardai_2
 import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -19,6 +20,7 @@ import androidx.appcompat.widget.SwitchCompat
 import com.google.android.gms.location.LocationServices
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import java.util.Calendar
 import kotlin.math.sqrt
 
 class MainActivity : AppCompatActivity(), SensorEventListener {
@@ -28,7 +30,14 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private lateinit var switchShake: SwitchCompat
     private lateinit var switchVolumeTrigger: SwitchCompat
 
-    // Shake detection variables
+    // UI Elements for AI Monitor
+    private lateinit var tvRiskStatus: TextView
+    private lateinit var llRiskStatus: LinearLayout
+
+    // ML Predictor
+    private lateinit var crimePredictor: CrimePredictor
+
+    // Shake detection
     private lateinit var sensorManager: SensorManager
     private var acceleration = 0f
     private var currentAcceleration = 0f
@@ -36,11 +45,11 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private var shakeCount = 0
     private var lastShakeTime: Long = 0
 
-    // Volume trigger variables (Internal to App)
+    // Volume trigger
     private var volumeBtnCount = 0
     private var lastVolumeBtnTime: Long = 0
 
-    // Permission launcher defined at class level to avoid lifecycle crashes
+    // Main SOS Permission Launcher
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
@@ -55,11 +64,16 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        // Initialize ML Predictor
+        crimePredictor = CrimePredictor(this)
+
         // Initialize UI
         etPhone = findViewById(R.id.etPhone)
         cbSendAll = findViewById(R.id.cbSendAll)
         switchShake = findViewById(R.id.switchShake)
         switchVolumeTrigger = findViewById(R.id.switchVolumeTrigger)
+        tvRiskStatus = findViewById(R.id.tvRiskStatus)
+        llRiskStatus = findViewById(R.id.llRiskStatus)
 
         // Initialize Sensors
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
@@ -67,17 +81,15 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         currentAcceleration = SensorManager.GRAVITY_EARTH
         lastAcceleration = SensorManager.GRAVITY_EARTH
 
-        // Contacts Button
+        // Button Listeners
         findViewById<Button>(R.id.btnViewContacts).setOnClickListener {
             startActivity(Intent(this, ContactsActivity::class.java))
         }
 
-        // Manual SOS Button
         findViewById<Button>(R.id.btnSOS).setOnClickListener {
             checkPermissionsAndTrigger()
         }
 
-        // Volume Service Toggle (For Background/Screen-off listening)
         switchVolumeTrigger.setOnCheckedChangeListener { _, isChecked ->
             val serviceIntent = Intent(this, VolumeButtonService::class.java)
             if (isChecked) {
@@ -86,10 +98,8 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                 } else {
                     startService(serviceIntent)
                 }
-                Toast.makeText(this, "Background Monitoring Active", Toast.LENGTH_SHORT).show()
             } else {
                 stopService(serviceIntent)
-                Toast.makeText(this, "Background Monitoring Disabled", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -104,6 +114,36 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     }
 
     @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
+    private fun runRiskAnalysis() {
+        LocationServices.getFusedLocationProviderClient(this).lastLocation.addOnSuccessListener { loc ->
+            if (loc != null) {
+                // Formula to map any Lat/Lng to a District ID (1-50) used in your Python script
+                val districtId = (Math.abs(loc.latitude.toInt() + loc.longitude.toInt()) % 50) + 1
+                val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+
+                val riskScore = crimePredictor.getRiskScore(districtId, hour)
+                updateRiskUI(riskScore)
+            }
+        }
+    }
+
+    private fun updateRiskUI(score: Float) {
+        val percentage = (score * 100).toInt()
+        tvRiskStatus.text = "Area Risk Level: $percentage%"
+
+        if (score > 0.70) {
+            // High Risk - Red Theme
+            llRiskStatus.setBackgroundColor(Color.parseColor("#FFCDD2"))
+            tvRiskStatus.setTextColor(Color.parseColor("#B71C1C"))
+            Toast.makeText(this, "⚠️ High Risk Zone Detected!", Toast.LENGTH_SHORT).show()
+        } else {
+            // Safe - Blue Theme
+            llRiskStatus.setBackgroundColor(Color.parseColor("#E1F5FE"))
+            tvRiskStatus.setTextColor(Color.parseColor("#01579B"))
+        }
+    }
+
+    @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
     private fun sendSOS() {
         val prefs = getSharedPreferences("SOS_Prefs", MODE_PRIVATE)
         val json = prefs.getString("contact_list", null)
@@ -111,7 +151,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         val contactsList: List<Contact> = Gson().fromJson(json, type) ?: emptyList()
 
         val recipients = mutableListOf<String>()
-
         if (cbSendAll.isChecked) {
             recipients.addAll(contactsList.map { it.phone })
         } else if (etPhone.text.isNotEmpty()) {
@@ -119,7 +158,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         }
 
         if (recipients.isEmpty()) {
-            Toast.makeText(this, "No recipients. Please add/select a contact.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "No recipients found.", Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -129,7 +168,11 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                 val msg = "🚨 SOS ALERT! I need help. My location: $mapsLink"
 
                 try {
-                    val smsManager = getSystemService(SmsManager::class.java)
+                    val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        this.getSystemService(SmsManager::class.java)
+                    } else {
+                        SmsManager.getDefault()
+                    }
                     recipients.forEach { num ->
                         val parts = smsManager.divideMessage(msg)
                         smsManager.sendMultipartTextMessage(num, null, parts, null, null)
@@ -138,16 +181,12 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                 } catch (e: Exception) {
                     Toast.makeText(this, "SMS Failed: ${e.message}", Toast.LENGTH_LONG).show()
                 }
-            } else {
-                Toast.makeText(this, "Location not found. Ensure GPS is ON.", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
-    // --- Shake Detection Logic ---
     override fun onSensorChanged(event: SensorEvent?) {
         if (!switchShake.isChecked) return
-
         if (event?.sensor?.type == Sensor.TYPE_ACCELEROMETER) {
             val x = event.values[0]
             val y = event.values[1]
@@ -177,7 +216,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
-    // --- Volume Button Trigger (While app is open) ---
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
         if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
             val currentTime = System.currentTimeMillis()
@@ -199,7 +237,6 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
 
     override fun onResume() {
         super.onResume()
-        // Update selected contact from list
         val prefs = getSharedPreferences("SOS_Prefs", MODE_PRIVATE)
         val selectedPhone = prefs.getString("selected_phone", "")
         if (!selectedPhone.isNullOrEmpty()) {
@@ -210,6 +247,12 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         sensorManager.registerListener(this,
             sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER),
             SensorManager.SENSOR_DELAY_NORMAL)
+
+        // Re-run risk analysis when user returns to app
+        if (androidx.core.content.ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+            == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            runRiskAnalysis()
+        }
     }
 
     override fun onPause() {

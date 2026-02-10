@@ -9,7 +9,6 @@ class CrimePredictor(context: Context) {
     private var interpreter: Interpreter? = null
 
     init {
-        // This loads your "Brain" file from the assets folder
         val assetFileDescriptor = context.assets.openFd("crime_predictor.tflite")
         val inputStream = assetFileDescriptor.createInputStream()
         val modelBuffer = inputStream.readBytes()

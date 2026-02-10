@@ -8,6 +8,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.telephony.SmsManager
@@ -17,6 +18,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresPermission
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
+import androidx.core.content.ContextCompat
 import com.google.android.gms.location.LocationServices
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -49,14 +51,18 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private var volumeBtnCount = 0
     private var lastVolumeBtnTime: Long = 0
 
-    // Main SOS Permission Launcher
+    // Main SOS Permission Launcher - Handles SMS, Location, and CALL_PHONE
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
-        if (results.all { it.value }) {
-            sendSOS()
+        val smsGranted = results[Manifest.permission.SEND_SMS] ?: false
+        val callGranted = results[Manifest.permission.CALL_PHONE] ?: false
+        val locGranted = results[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+
+        if (smsGranted && callGranted && locGranted) {
+            executeFullSOS()
         } else {
-            Toast.makeText(this, "Permissions required for SOS", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "All permissions are required for Emergency SOS", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -107,39 +113,28 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
     private fun checkPermissionsAndTrigger() {
         val permissions = arrayOf(
             Manifest.permission.SEND_SMS,
+            Manifest.permission.CALL_PHONE,
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION
         )
         requestPermissionLauncher.launch(permissions)
     }
 
-    @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
-    private fun runRiskAnalysis() {
-        LocationServices.getFusedLocationProviderClient(this).lastLocation.addOnSuccessListener { loc ->
-            if (loc != null) {
-                // Formula to map any Lat/Lng to a District ID (1-50) used in your Python script
-                val districtId = (Math.abs(loc.latitude.toInt() + loc.longitude.toInt()) % 50) + 1
-                val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+    @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.CALL_PHONE, Manifest.permission.SEND_SMS])
+    private fun executeFullSOS() {
+        // 1. Send SMS with Location
+        sendSOS()
 
-                val riskScore = crimePredictor.getRiskScore(districtId, hour)
-                updateRiskUI(riskScore)
+        // 2. Initiate Call immediately
+        val number = etPhone.text.toString().trim()
+        if (number.isNotEmpty()) {
+            val callIntent = Intent(Intent.ACTION_CALL)
+            callIntent.data = Uri.parse("tel:$number")
+            try {
+                startActivity(callIntent)
+            } catch (e: Exception) {
+                Toast.makeText(this, "Call failed: ${e.message}", Toast.LENGTH_SHORT).show()
             }
-        }
-    }
-
-    private fun updateRiskUI(score: Float) {
-        val percentage = (score * 100).toInt()
-        tvRiskStatus.text = "Area Risk Level: $percentage%"
-
-        if (score > 0.70) {
-            // High Risk - Red Theme
-            llRiskStatus.setBackgroundColor(Color.parseColor("#FFCDD2"))
-            tvRiskStatus.setTextColor(Color.parseColor("#B71C1C"))
-            Toast.makeText(this, "⚠️ High Risk Zone Detected!", Toast.LENGTH_SHORT).show()
-        } else {
-            // Safe - Blue Theme
-            llRiskStatus.setBackgroundColor(Color.parseColor("#E1F5FE"))
-            tvRiskStatus.setTextColor(Color.parseColor("#01579B"))
         }
     }
 
@@ -171,17 +166,43 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
                     val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                         this.getSystemService(SmsManager::class.java)
                     } else {
+                        @Suppress("DEPRECATION")
                         SmsManager.getDefault()
                     }
                     recipients.forEach { num ->
                         val parts = smsManager.divideMessage(msg)
                         smsManager.sendMultipartTextMessage(num, null, parts, null, null)
                     }
-                    Toast.makeText(this, "SOS Sent!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, "SOS SMS Sent!", Toast.LENGTH_SHORT).show()
                 } catch (e: Exception) {
                     Toast.makeText(this, "SMS Failed: ${e.message}", Toast.LENGTH_LONG).show()
                 }
             }
+        }
+    }
+
+    @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
+    private fun runRiskAnalysis() {
+        LocationServices.getFusedLocationProviderClient(this).lastLocation.addOnSuccessListener { loc ->
+            if (loc != null) {
+                val districtId = (Math.abs(loc.latitude.toInt() + loc.longitude.toInt()) % 50) + 1
+                val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+                val riskScore = crimePredictor.getRiskScore(districtId, hour)
+                updateRiskUI(riskScore)
+            }
+        }
+    }
+
+    private fun updateRiskUI(score: Float) {
+        val percentage = (score * 100).toInt()
+        tvRiskStatus.text = "Area Risk Level: $percentage%"
+
+        if (score > 0.70) {
+            llRiskStatus.setBackgroundColor(Color.parseColor("#FFCDD2"))
+            tvRiskStatus.setTextColor(Color.parseColor("#B71C1C"))
+        } else {
+            llRiskStatus.setBackgroundColor(Color.parseColor("#E1F5FE"))
+            tvRiskStatus.setTextColor(Color.parseColor("#01579B"))
         }
     }
 
@@ -248,8 +269,7 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
             sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER),
             SensorManager.SENSOR_DELAY_NORMAL)
 
-        // Re-run risk analysis when user returns to app
-        if (androidx.core.content.ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
             == android.content.pm.PackageManager.PERMISSION_GRANTED) {
             runRiskAnalysis()
         }

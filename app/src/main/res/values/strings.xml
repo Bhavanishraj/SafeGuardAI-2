@@ -1,3 +1,6 @@
 <resources>
     <string name="app_name">SafeGuardAi-2</string>
+    <string name="status_title">SafeGuard AI Monitor</string>
+    <string name="emergency_contact_label">Emergency Contact Number</string>
+    <string name="send_sos_all">Send SOS to all emergency contacts</string>
 </resources>

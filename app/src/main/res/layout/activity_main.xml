@@ -1,192 +1,178 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="20dp"
+    android:fillViewport="true"
     android:background="#FAF8FF">
 
-    <androidx.cardview.widget.CardView
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
-        android:layout_marginBottom="20dp"
-        app:cardCornerRadius="12dp"
-        app:cardElevation="6dp"
-        xmlns:app="http://schemas.android.com/apk/res-auto">
+        android:orientation="vertical"
+        android:padding="20dp">
 
-        <LinearLayout
-            android:id="@+id/llRiskStatus"
+        <androidx.cardview.widget.CardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="16dp"
-            android:background="#E1F5FE">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="🛡️ SafeGuard AI Monitor"
-                android:textStyle="bold"
-                android:textColor="#000000"
-                android:textSize="14sp" />
-
-            <TextView
-                android:id="@+id/tvRiskStatus"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="AI Status: Analyzing Location..."
-                android:textColor="#000000"
-                android:textSize="18sp"
-                android:layout_marginTop="4dp" />
-        </LinearLayout>
-    </androidx.cardview.widget.CardView>
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Emergency Contact Number"
-        android:textStyle="bold"
-        android:textSize="18sp"
-        android:textColor="#000000"
-        android:layout_marginTop="10dp"/>
-
-    <EditText
-        android:id="@+id/etPhone"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:hint="+91XXXXXXXXXX"
-        android:textColor="#000000"
-        android:textColorHint="#757575"
-        android:maxLength="10"
-        android:inputType="phone" />
-
-    <CheckBox
-        android:id="@+id/cbSendAll"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Send SOS to all emergency contacts"
-        android:textColor="#000000" />
-
-    <com.google.android.material.card.MaterialCardView
-        android:id="@+id/cardViewContacts"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_margin="16dp"
-        app:cardCornerRadius="20dp"
-        app:cardElevation="2dp"
-        app:cardBackgroundColor="#F3E5F5"
-        app:strokeColor="#E1BEE7"
-        app:strokeWidth="1dp">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:padding="10dp">
-
-            <FrameLayout
-                android:layout_width="52dp"
-                android:layout_height="52dp"
-                android:background="@drawable/circle_background_light">
-
-                <ImageView
-                    android:layout_width="28dp"
-                    android:layout_height="28dp"
-                    android:layout_gravity="center"
-                    android:src="@android:drawable/ic_menu_myplaces"
-                    app:tint="#7B1FA2" />
-            </FrameLayout>
+            android:layout_marginTop="10dp"
+            android:layout_marginBottom="20dp"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="4dp">
 
             <LinearLayout
-                android:layout_width="0dp"
+                android:id="@+id/llRiskStatus"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="16dp"
-                android:layout_weight="1"
-                android:orientation="vertical">
+                android:orientation="vertical"
+                android:padding="16dp"
+                android:background="#E1F5FE">
 
                 <TextView
+                    android:id="@+id/tvRiskStatus"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Trusted Circle"
-                    android:textColor="#4A148C"
-                    android:textSize="18sp"
+                    android:text="Status: Standing By"
+                    android:textColor="#000000"
+                    android:textSize="20sp"
                     android:textStyle="bold" />
 
-                <TextView
-                    android:layout_width="wrap_content"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Manage emergency contacts"
-                    android:textColor="#7B1FA2"
-                    android:textSize="13sp" />
+                    android:orientation="horizontal"
+                    android:layout_marginTop="12dp"
+                    android:gravity="center_vertical">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:id="@+id/tvHeartRate"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="💓 Heart Rate: -- BPM"
+                            android:textColor="#000000"
+                            android:textSize="16sp" />
+
+                        <TextView
+                            android:id="@+id/tvSoundValue"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="4dp"
+                            android:text="🔊 Sound Level: --"
+                            android:textColor="#000000"
+                            android:textSize="16sp" />
+                    </LinearLayout>
+
+                    <ProgressBar
+                        android:id="@+id/pbHeartRate"
+                        style="?android:attr/progressBarStyleHorizontal"
+                        android:layout_width="80dp"
+                        android:layout_height="wrap_content"
+                        android:max="180"
+                        android:progress="0"
+                        android:progressTint="#D32F2F" />
+                </LinearLayout>
             </LinearLayout>
-
-            <ImageView
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:src="@android:drawable/ic_media_play"
-                app:tint="#7B1FA2" />
-
-        </LinearLayout>
-    </com.google.android.material.card.MaterialCardView>
-
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnSOS"
-        android:layout_width="160dp"
-        android:layout_height="160dp"
-        android:layout_gravity="center"
-        android:layout_marginTop="5dp"
-        android:backgroundTint="#D32F2F"
-        android:text="SOS"
-        android:textSize="24sp"
-        android:textStyle="bold"
-        app:cornerRadius="80dp"
-        app:elevation="8dp" />
-    <androidx.cardview.widget.CardView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
-        app:cardCornerRadius="12dp"
-        app:cardElevation="6dp">
+        </androidx.cardview.widget.CardView>
 
         <TextView
-            android:id="@+id/tvSelectedContact"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:text="Emergency Recipient"
+            android:textStyle="bold"
+            android:textColor="#000000"/>
+
+        <EditText
+            android:id="@+id/etPhone"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="+91XXXXXXXXXX"
+            android:textColor="#000000"
+            android:textColorHint="#757575"
+            android:backgroundTint="#000000"
+            android:inputType="phone" />
+
+        <CheckBox
+            android:id="@+id/cbSendAll"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Alert All Saved Contacts"
+            android:textColor="#000000"
+            android:buttonTint="#000000" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/btnViewContacts"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginVertical="12dp"
+            app:cardCornerRadius="12dp"
+            app:cardBackgroundColor="#F3E5F5">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:padding="16dp"
+                android:text="👥 View Trusted Circle"
+                android:textColor="#000000"
+                android:textStyle="bold" />
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSOS"
+            android:layout_width="140dp"
+            android:layout_height="140dp"
             android:layout_gravity="center"
+            android:backgroundTint="#D32F2F"
+            android:text="SOS"
+            android:textSize="22sp"
+            android:textColor="#FFFFFF"
+            app:cornerRadius="70dp" />
+
+        <androidx.cardview.widget.CardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardCornerRadius="12dp"
             android:layout_marginTop="20dp"
-            android:padding="12dp"
-            android:text="Selected contact: None"
-            android:textColor="#000000" />
-    </androidx.cardview.widget.CardView>
+            android:layout_marginBottom="20dp">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="10dp">
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/switchShake"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="48dp"
+                    android:text="Shake to SOS"
+                    android:textColor="#000000" />
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/switchVolumeTrigger"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="48dp"
+                    android:text="Trigger Fake Call"
+                    android:textColor="#000000" />
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/switchNetworkGuard"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="48dp"
+                    android:text="Low Network Guard"
+                    android:textColor="#000000" />
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/switchIoT"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="48dp"
+                    android:text="Connect IoT (Pulse/Sound)"
+                    android:textColor="#000000" />
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
 
-    <androidx.appcompat.widget.SwitchCompat
-        android:id="@+id/switchShake"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Enable Shake to SOS (3 times)"
-        android:textColor="#000000"
-        android:layout_marginTop="16dp"
-        android:padding="8dp" />
-
-    <androidx.appcompat.widget.SwitchCompat
-        android:id="@+id/switchVolumeTrigger"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
-        android:padding="8dp"
-        android:text="Trigger Fake Call"
-        android:textColor="#000000" />
-
-    <androidx.appcompat.widget.SwitchCompat
-        android:id="@+id/switchNetworkGuard"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
-        android:padding="8dp"
-        android:text="Auto Network-Zone Alerts"
-        android:textColor="#000000" />
-
-</LinearLayout>
+    </LinearLayout>
+</ScrollView>

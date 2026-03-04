@@ -1,23 +1,89 @@
 <?xml version="1.0" encoding="utf-8"?>
-<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:padding="16dp">
+    android:orientation="vertical"
+    android:background="#FFFFFF"
+    android:padding="20dp">
 
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/rvContacts"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:layout_above="@+id/fabAddContact" />
-
-    <com.google.android.material.floatingactionbutton.FloatingActionButton
-        android:id="@+id/fabAddContact"
+    <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_alignParentBottom="true"
-        android:layout_alignParentEnd="true"
-        android:layout_margin="16dp"
-        app:srcCompat="@android:drawable/ic_input_add" />
+        android:text="Trusted Circle"
+        android:textColor="#000000"
+        android:textSize="22sp"
+        android:textStyle="bold" />
 
-</RelativeLayout>
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Add people who should receive your SOS"
+        android:textColor="#757575"
+        android:textSize="14sp"
+        android:layout_marginBottom="10dp"/>
+
+    <EditText
+        android:id="@+id/etContactName"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Name (e.g., Mom)"
+        android:layout_marginTop="10dp"
+        android:inputType="textPersonName"
+        android:textColor="#000000"
+        android:minHeight="48dp"
+        android:backgroundTint="#6200EE"/>
+
+    <EditText
+        android:id="@+id/etContactPhone"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="Phone (e.g., +91...)"
+        android:layout_marginTop="10dp"
+        android:inputType="phone"
+        android:textColor="#000000"
+        android:minHeight="48dp"
+        android:backgroundTint="#6200EE"/>
+
+    <Button
+        android:id="@+id/btnAddManual"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Add to SOS List"
+        android:layout_marginTop="15dp"
+        android:backgroundTint="#6200EE"
+        android:textColor="#FFFFFF" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#DDDDDD"
+        android:layout_marginVertical="20dp" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Tap to select | Long-press to delete"
+        android:textColor="#757575"
+        android:textSize="12sp"
+        android:gravity="center"
+        android:layout_marginBottom="5dp"/>
+
+    <ListView
+        android:id="@+id/lvTrustedCircle"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:divider="#EEEEEE"
+        android:dividerHeight="1dp"
+        android:listSelector="@android:color/darker_gray"/>
+
+    <Button
+        android:id="@+id/btnClearCircle"
+        style="?android:attr/borderlessButtonStyle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Clear All Contacts"
+        android:textColor="#D32F2F"
+        android:layout_marginTop="10dp" />
+
+</LinearLayout>

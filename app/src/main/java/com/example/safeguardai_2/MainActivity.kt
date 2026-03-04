@@ -1,69 +1,97 @@
 package com.example.safeguardai_2
 
 import android.Manifest
-import android.content.Context
-import android.content.Intent
+import android.app.Activity
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.*
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.net.Uri
-import android.os.Build
-import android.os.Bundle
+import android.os.*
+import android.provider.Settings
 import android.telephony.SmsManager
-import android.view.KeyEvent
+import android.util.Log
+import android.view.View
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresPermission
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
-import com.google.android.gms.location.LocationServices
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
+import com.google.android.gms.location.*
 import java.util.Calendar
 import kotlin.math.sqrt
 
 class MainActivity : AppCompatActivity(), SensorEventListener {
 
+    private lateinit var fused: FusedLocationProviderClient
     private lateinit var etPhone: EditText
-    private lateinit var cbSendAll: CheckBox
-    private lateinit var switchShake: SwitchCompat
-    private lateinit var switchVolumeTrigger: SwitchCompat
-    private lateinit var switchNetworkGuard: SwitchCompat // New: Network Guard Toggle
-
-    // UI Elements for AI Monitor
     private lateinit var tvRiskStatus: TextView
+    private lateinit var tvHeartRate: TextView
+    private lateinit var tvSoundValue: TextView
     private lateinit var llRiskStatus: LinearLayout
+    private lateinit var pbHeartRate: ProgressBar
 
-    // ML Predictor
+    private lateinit var switchShake: SwitchCompat
+    private lateinit var switchIoT: SwitchCompat
+    private lateinit var switchNetworkGuard: SwitchCompat
+    private lateinit var switchVolumeTrigger: SwitchCompat
+    private lateinit var cbSendAll: CheckBox
+
     private lateinit var crimePredictor: CrimePredictor
-
-    // Shake detection
     private lateinit var sensorManager: SensorManager
-    private var acceleration = 0f
-    private var currentAcceleration = 0f
-    private var lastAcceleration = 0f
-    private var shakeCount = 0
-    private var lastShakeTime: Long = 0
 
-    // Volume trigger
-    private var volumeBtnCount = 0
-    private var lastVolumeBtnTime: Long = 0
+    private var lastSmsTime: Long = 0
+    private var isManualTrigger = false
 
-    // Updated Permission Launcher to include CALL_PHONE and READ_PHONE_STATE
-    private val requestPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { results ->
-        val smsGranted = results[Manifest.permission.SEND_SMS] ?: false
-        val callGranted = results[Manifest.permission.CALL_PHONE] ?: false
-        val locGranted = results[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+    // IoT Watchdog
+    private val disconnectionHandler = Handler(Looper.getMainLooper())
+    private var isDeviceConnected = false
+    private val DISCONNECT_TIMEOUT = 10000L
 
-        if (smsGranted && callGranted && locGranted) {
-            executeFullSOS()
-        } else {
-            Toast.makeText(this, "Permissions (SMS, Call, Location) are required for SOS", Toast.LENGTH_SHORT).show()
+    private var accelCurrent = SensorManager.GRAVITY_EARTH
+    private var accelLast = SensorManager.GRAVITY_EARTH
+    private var accelMagnitude = 0f
+
+    private val checkDisconnection = Runnable {
+        if (isDeviceConnected) {
+            isDeviceConnected = false
+            Toast.makeText(this, "❌ IoT Device Disconnected", Toast.LENGTH_LONG).show()
+            tvHeartRate.text = "💓 BPM: --"
+            tvSoundValue.text = "🔊 Sound: --"
+            pbHeartRate.progress = 0
+        }
+    }
+
+    private val pickContactLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val phone = result.data?.getStringExtra("selected_phone")
+            if (phone != null) etPhone.setText(phone)
+        }
+    }
+
+    private val esp32Receiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (!switchIoT.isChecked) return
+
+            when (intent?.action) {
+                "ESP32_DATA" -> {
+                    val rawData = intent.getStringExtra("raw") ?: ""
+                    if (!isDeviceConnected) {
+                        isDeviceConnected = true
+                        Toast.makeText(context, "✅ IoT Device Connected", Toast.LENGTH_SHORT).show()
+                    }
+                    disconnectionHandler.removeCallbacks(checkDisconnection)
+                    disconnectionHandler.postDelayed(checkDisconnection, DISCONNECT_TIMEOUT)
+                    processIoTData(rawData)
+                }
+                "ESP32_EMERGENCY" -> triggerEmergency("Hardware Panic Button")
+            }
         }
     }
 
@@ -71,236 +99,175 @@ class MainActivity : AppCompatActivity(), SensorEventListener {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        // Initialize ML Predictor
+        fused = LocationServices.getFusedLocationProviderClient(this)
+        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         crimePredictor = CrimePredictor(this)
 
-        // Initialize UI
         etPhone = findViewById(R.id.etPhone)
-        cbSendAll = findViewById(R.id.cbSendAll)
-        switchShake = findViewById(R.id.switchShake)
-        switchVolumeTrigger = findViewById(R.id.switchVolumeTrigger)
-        switchNetworkGuard = findViewById(R.id.switchNetworkGuard) // Initialize New Toggle
         tvRiskStatus = findViewById(R.id.tvRiskStatus)
+        tvHeartRate = findViewById(R.id.tvHeartRate)
+        tvSoundValue = findViewById(R.id.tvSoundValue)
         llRiskStatus = findViewById(R.id.llRiskStatus)
+        pbHeartRate = findViewById(R.id.pbHeartRate)
+        switchShake = findViewById(R.id.switchShake)
+        switchIoT = findViewById(R.id.switchIoT)
+        switchNetworkGuard = findViewById(R.id.switchNetworkGuard)
+        switchVolumeTrigger = findViewById(R.id.switchVolumeTrigger)
+        cbSendAll = findViewById(R.id.cbSendAll)
 
-        // Initialize Sensors
-        sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
-        acceleration = 10f
-        currentAcceleration = SensorManager.GRAVITY_EARTH
-        lastAcceleration = SensorManager.GRAVITY_EARTH
+        createNotificationChannel()
+        checkOverlayPermission()
 
-        // Button Listeners
-        findViewById<Button>(R.id.btnViewContacts).setOnClickListener {
-            startActivity(Intent(this, ContactsActivity::class.java))
+        startService(Intent(this, BluetoothService::class.java))
+
+        switchVolumeTrigger.setOnCheckedChangeListener { _, isChecked ->
+            val vIntent = Intent(this, VolumeButtonService::class.java)
+            if (isChecked) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(vIntent)
+                else startService(vIntent)
+            } else stopService(vIntent)
         }
 
         findViewById<Button>(R.id.btnSOS).setOnClickListener {
-            checkPermissionsAndTrigger()
+            isManualTrigger = true
+            triggerEmergency("Manual Trigger")
         }
 
-        // Toggle for Fake Call Background Service
-        switchVolumeTrigger.setOnCheckedChangeListener { _, isChecked ->
-            val serviceIntent = Intent(this, VolumeButtonService::class.java)
-            if (isChecked) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    startForegroundService(serviceIntent)
-                } else {
-                    startService(serviceIntent)
-                }
-            } else {
-                stopService(serviceIntent)
-            }
+        findViewById<View>(R.id.btnViewContacts).setOnClickListener {
+            pickContactLauncher.launch(Intent(this, ContactsActivity::class.java))
         }
 
-        // New: Toggle for Network Boundary Monitoring Service
-        switchNetworkGuard.setOnCheckedChangeListener { _, isChecked ->
-            val intent = Intent(this, NetworkMonitorService::class.java)
-            if (isChecked) {
-                // Request Phone State permission before starting
-                if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_PHONE_STATE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                    requestPermissionLauncher.launch(arrayOf(Manifest.permission.READ_PHONE_STATE))
-                }
+        runMLPrediction()
+    }
 
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    startForegroundService(intent)
-                } else {
-                    startService(intent)
-                }
-            } else {
-                stopService(intent)
-            }
+    private fun checkOverlayPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
+            startActivity(intent)
         }
     }
 
-    private fun checkPermissionsAndTrigger() {
-        val permissions = arrayOf(
-            Manifest.permission.SEND_SMS,
-            Manifest.permission.CALL_PHONE,
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION
-        )
-        requestPermissionLauncher.launch(permissions)
-    }
-
-    // Combined SOS Action: Sends SMS and starts a Call
-    @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.CALL_PHONE, Manifest.permission.SEND_SMS])
-    private fun executeFullSOS() {
-        sendSOS() // Send SMS with Location
-
-        val number = etPhone.text.toString().trim()
-        if (number.isNotEmpty()) {
-            val callIntent = Intent(Intent.ACTION_CALL)
-            callIntent.data = Uri.parse("tel:$number")
+    private fun processIoTData(raw: String) {
+        runOnUiThread {
             try {
-                startActivity(callIntent)
-            } catch (e: Exception) {
-                Toast.makeText(this, "Call failed: ${e.message}", Toast.LENGTH_SHORT).show()
+                // Expected: "BPM:85,SOUND:300"
+                val parts = raw.split(",")
+                var bpm = 0; var sound = 0
+                for (part in parts) {
+                    val clean = part.trim()
+                    if (clean.contains("BPM:")) bpm = clean.substringAfter(":").toIntOrNull() ?: 0
+                    if (clean.contains("SOUND:")) sound = clean.substringAfter(":").toIntOrNull() ?: 0
+                }
+
+                tvHeartRate.text = "💓 BPM: $bpm"
+                tvSoundValue.text = "🔊 Sound: $sound"
+                pbHeartRate.progress = bpm
+
+                if (bpm > 125 || sound > 900) {
+                    isManualTrigger = false
+                    triggerEmergency("Sensor Anomaly Detected")
+                }
+            } catch (e: Exception) { Log.e("DataErr", "Parsing error: $raw") }
+        }
+    }
+
+    override fun onSensorChanged(e: SensorEvent?) {
+        if (!switchShake.isChecked || e?.sensor?.type != Sensor.TYPE_ACCELEROMETER) return
+        accelLast = accelCurrent
+        accelCurrent = sqrt((e.values[0]*e.values[0] + e.values[1]*e.values[1] + e.values[2]*e.values[2]).toDouble()).toFloat()
+        accelMagnitude = accelMagnitude * 0.9f + (accelCurrent - accelLast)
+        if (accelMagnitude > 12f) {
+            isManualTrigger = false
+            triggerEmergency("Shake Detected")
+        }
+    }
+
+    private fun triggerEmergency(reason: String) {
+        val now = System.currentTimeMillis()
+        if (now - lastSmsTime > 30000) {
+            lastSmsTime = now
+            runOnUiThread {
+                Toast.makeText(this, "🚨 SOS: $reason", Toast.LENGTH_SHORT).show()
+                handleSOSFlow()
             }
         }
     }
 
-    @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
-    private fun sendSOS() {
-        val prefs = getSharedPreferences("SOS_Prefs", MODE_PRIVATE)
-        val json = prefs.getString("contact_list", null)
-        val type = object : TypeToken<MutableList<Contact>>() {}.type
-        val contactsList: List<Contact> = Gson().fromJson(json, type) ?: emptyList()
-
-        val recipients = mutableListOf<String>()
-        if (cbSendAll.isChecked) {
-            recipients.addAll(contactsList.map { it.phone })
-        } else if (etPhone.text.isNotEmpty()) {
-            recipients.add(etPhone.text.toString().trim())
-        }
-
-        if (recipients.isEmpty()) {
-            Toast.makeText(this, "No recipients found.", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        LocationServices.getFusedLocationProviderClient(this).lastLocation.addOnSuccessListener { loc ->
-            if (loc != null) {
-                // Fixed mapsLink template syntax
-                val mapsLink = "https://www.google.com/maps?q=$/${loc.latitude},${loc.longitude}"
-                val msg = "🚨 SOS ALERT! I need help. My location: $mapsLink"
-
-                try {
-                    val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                        this.getSystemService(SmsManager::class.java)
-                    } else {
-                        SmsManager.getDefault()
-                    }
-                    recipients.forEach { num ->
-                        val parts = smsManager.divideMessage(msg)
-                        smsManager.sendMultipartTextMessage(num, null, parts, null, null)
-                    }
-                    Toast.makeText(this, "SOS Sent!", Toast.LENGTH_SHORT).show()
-                } catch (e: Exception) {
-                    Toast.makeText(this, "SMS Failed: ${e.message}", Toast.LENGTH_LONG).show()
-                }
-            }
+    private fun handleSOSFlow() {
+        val perms = arrayOf(Manifest.permission.SEND_SMS, Manifest.permission.CALL_PHONE, Manifest.permission.ACCESS_FINE_LOCATION)
+        if (perms.all { ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED }) {
+            requestLocationAndSendSOS()
+        } else {
+            requestPermissionLauncher.launch(perms)
         }
     }
 
-    // ... (runRiskAnalysis and updateRiskUI stay the same) ...
+    private val requestPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { results ->
+        if (results.values.all { it }) requestLocationAndSendSOS()
+    }
 
-    override fun onSensorChanged(event: SensorEvent?) {
-        if (!switchShake.isChecked) return
-        if (event?.sensor?.type == Sensor.TYPE_ACCELEROMETER) {
-            val x = event.values[0]
-            val y = event.values[1]
-            val z = event.values[2]
-
-            lastAcceleration = currentAcceleration
-            currentAcceleration = sqrt((x * x + y * y + z * z).toDouble()).toFloat()
-            val delta = currentAcceleration - lastAcceleration
-            acceleration = acceleration * 0.9f + delta
-
-            if (acceleration > 12) {
-                val now = System.currentTimeMillis()
-                if (now - lastShakeTime < 500) {
-                    shakeCount++
-                } else {
-                    shakeCount = 1
-                }
-                lastShakeTime = now
-
-                if (shakeCount >= 3) {
-                    shakeCount = 0
-                    checkPermissionsAndTrigger()
-                }
-            }
+    @RequiresPermission(allOf = [Manifest.permission.SEND_SMS, Manifest.permission.ACCESS_FINE_LOCATION])
+    private fun requestLocationAndSendSOS() {
+        val phone = etPhone.text.toString().trim()
+        if (phone.isEmpty()) return
+        fused.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null).addOnSuccessListener { loc ->
+            sendEmergencyPayload(loc?.latitude ?: 0.0, loc?.longitude ?: 0.0, isManualTrigger, phone)
         }
     }
 
-    override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
-            val currentTime = System.currentTimeMillis()
-            if (currentTime - lastVolumeBtnTime < 2000) {
-                volumeBtnCount++
+    private fun sendEmergencyPayload(lat: Double, lon: Double, manual: Boolean, phone: String) {
+        val mapsLink = if (lat != 0.0) "https://www.google.com/maps?q=$lat,$lon" else "GPS Unavailable"
+        val message = "🚨 SOS! I need help. My Location: $mapsLink"
+        val smsManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) getSystemService(SmsManager::class.java) else SmsManager.getDefault()
+        try {
+            smsManager.sendMultipartTextMessage(phone, null, smsManager.divideMessage(message), null, null)
+            if (manual) startActivity(Intent(Intent.ACTION_CALL, Uri.parse("tel:$phone")))
+        } catch (e: Exception) {
+            startActivity(Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:$phone")).apply { putExtra("sms_body", message) })
+        }
+    }
+
+    private fun runMLPrediction() {
+        val score = crimePredictor.getRiskScore(1, Calendar.getInstance().get(Calendar.HOUR_OF_DAY))
+        runOnUiThread {
+            if (score > 0.6) {
+                llRiskStatus.setBackgroundColor(Color.parseColor("#FFCDD2"))
+                tvRiskStatus.text = "Status: High Risk Area"
             } else {
-                volumeBtnCount = 1
-            }
-            lastVolumeBtnTime = currentTime
-
-            if (volumeBtnCount >= 3) {
-                volumeBtnCount = 0
-                startActivity(Intent(this, FakeCallActivity::class.java))
-                return true
+                llRiskStatus.setBackgroundColor(Color.parseColor("#E1F5FE"))
+                tvRiskStatus.text = "Status: Safe Area"
             }
         }
-        return super.onKeyDown(keyCode, event)
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel("BT_CHANNEL", "SafeGuard Service", NotificationManager.IMPORTANCE_LOW)
+            getSystemService(NotificationManager::class.java)?.createNotificationChannel(channel)
+        }
     }
 
     override fun onResume() {
         super.onResume()
-        // ... (Existing SharedPreferences and Sensor Registration) ...
-        val prefs = getSharedPreferences("SOS_Prefs", MODE_PRIVATE)
-        val selectedPhone = prefs.getString("selected_phone", "")
-        if (!selectedPhone.isNullOrEmpty()) {
-            etPhone.setText(selectedPhone)
-            prefs.edit().remove("selected_phone").apply()
+        sensorManager.registerListener(this, sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER), SensorManager.SENSOR_DELAY_NORMAL)
+        val filter = IntentFilter().apply {
+            addAction("ESP32_DATA")
+            addAction("ESP32_EMERGENCY")
         }
-
-        sensorManager.registerListener(this,
-            sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER),
-            SensorManager.SENSOR_DELAY_NORMAL)
-
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
-            == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            runRiskAnalysis()
-        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) registerReceiver(esp32Receiver, filter, RECEIVER_EXPORTED)
+        else registerReceiver(esp32Receiver, filter)
     }
 
     override fun onPause() {
         super.onPause()
         sensorManager.unregisterListener(this)
+        try { unregisterReceiver(esp32Receiver) } catch (e: Exception) {}
     }
 
-    // Manual inclusion of previous methods to ensure complete code
-    @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
-    private fun runRiskAnalysis() {
-        LocationServices.getFusedLocationProviderClient(this).lastLocation.addOnSuccessListener { loc ->
-            if (loc != null) {
-                val districtId = (Math.abs(loc.latitude.toInt() + loc.longitude.toInt()) % 50) + 1
-                val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-                val riskScore = crimePredictor.getRiskScore(districtId, hour)
-                updateRiskUI(riskScore)
-            }
-        }
+    override fun onDestroy() {
+        disconnectionHandler.removeCallbacks(checkDisconnection)
+        super.onDestroy()
     }
 
-    private fun updateRiskUI(score: Float) {
-        val percentage = (score * 100).toInt()
-        tvRiskStatus.text = "Area Risk Level: $percentage%"
-        if (score > 0.70) {
-            llRiskStatus.setBackgroundColor(Color.parseColor("#FFCDD2"))
-            tvRiskStatus.setTextColor(Color.parseColor("#B71C1C"))
-        } else {
-            llRiskStatus.setBackgroundColor(Color.parseColor("#E1F5FE"))
-            tvRiskStatus.setTextColor(Color.parseColor("#01579B"))
-        }
-    }
-
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+    override fun onAccuracyChanged(p0: Sensor?, p1: Int) {}
 }
